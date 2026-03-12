@@ -5,14 +5,13 @@ from langchain_groq import ChatGroq
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFDirectoryLoader
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain.chains import create_retrieval_chain
 from dotenv import load_dotenv
 
-# ── Environment ──────────────────────────────────────────────────────────────
+# ── Environment ───────────────────────────────────────────────────────────────
 load_dotenv()
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -85,7 +84,7 @@ st.markdown("""
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("<div class='main-header'>💬 Chat with Your Doctor</div>", unsafe_allow_html=True)
 
-# ── LLM & Prompt ─────────────────────────────────────────────────────────────
+# ── LLM ───────────────────────────────────────────────────────────────────────
 @st.cache_resource
 def get_llm():
     return ChatGroq(
@@ -95,6 +94,7 @@ def get_llm():
 
 llm = get_llm()
 
+# ── Prompt ────────────────────────────────────────────────────────────────────
 prompt_template = ChatPromptTemplate.from_template("""
 You are a helpful medical assistant. Answer the question below using ONLY the provided context.
 If the answer is not in the context, say: "I couldn't find relevant information in the provided documents."
@@ -103,10 +103,25 @@ If the answer is not in the context, say: "I couldn't find relevant information 
 {context}
 </context>
 
-Question: {input}
+Question: {question}
 
 Provide a clear, accurate, and helpful answer.
 """)
+
+def format_docs(docs):
+    return "\n\n".join(doc.page_content for doc in docs)
+
+def build_chain(retriever):
+    """Pure LCEL chain — no langchain.chains dependency."""
+    return (
+        {
+            "context":  retriever | format_docs,
+            "question": RunnablePassthrough(),
+        }
+        | prompt_template
+        | llm
+        | StrOutputParser()
+    )
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -137,7 +152,7 @@ with st.sidebar:
     st.markdown("**Model:** LLaMA 3.3 70B  \n**Embeddings:** OpenAI  \n**Vector DB:** FAISS")
 
 # ── Embedding function ────────────────────────────────────────────────────────
-def build_vector_store(uploaded_files, chunk_size: int, chunk_overlap: int, max_docs: int):
+def build_vector_store(uploaded_files, chunk_size, chunk_overlap, max_docs):
     if not uploaded_files:
         st.error("Please upload at least one PDF file.")
         return False
@@ -156,17 +171,15 @@ def build_vector_store(uploaded_files, chunk_size: int, chunk_overlap: int, max_
             out_f.write(up.read())
 
     with st.spinner("📄 Loading PDF documents…"):
-        loader = PyPDFDirectoryLoader(tmp_dir)
-        docs   = loader.load()
+        docs = PyPDFDirectoryLoader(tmp_dir).load()
 
     with st.spinner("✂️ Splitting into chunks…"):
-        splitter = RecursiveCharacterTextSplitter(
+        chunks = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-        )
-        chunks = splitter.split_documents(docs[:max_docs])
+        ).split_documents(docs[:max_docs])
 
-    with st.spinner("🔢 Generating embeddings (this may take a moment)…"):
+    with st.spinner("🔢 Generating embeddings…"):
         embeddings = OpenAIEmbeddings()
         vectors    = FAISS.from_documents(chunks, embeddings)
 
@@ -204,34 +217,34 @@ with col1:
         else:
             with st.spinner("🤔 Thinking…"):
                 try:
-                    doc_chain       = create_stuff_documents_chain(llm, prompt_template)
-                    retriever       = st.session_state.vectors.as_retriever(
-                                          search_kwargs={"k": 5}
-                                      )
-                    retrieval_chain = create_retrieval_chain(retriever, doc_chain)
+                    retriever = st.session_state.vectors.as_retriever(
+                        search_kwargs={"k": 5}
+                    )
+                    chain = build_chain(retriever)
 
-                    t0       = time.perf_counter()
-                    response = retrieval_chain.invoke({"input": question})
-                    elapsed  = time.perf_counter() - t0
+                    t0      = time.perf_counter()
+                    answer  = chain.invoke(question)
+                    elapsed = time.perf_counter() - t0
 
-                    st.session_state.last_response = response
-                    st.session_state.last_elapsed  = elapsed
+                    # Also fetch the source docs for display
+                    source_docs = retriever.invoke(question)
+
+                    st.session_state.last_answer  = answer
+                    st.session_state.last_elapsed = elapsed
+                    st.session_state.last_docs    = source_docs
 
                 except Exception as e:
                     st.error(f"❌ Error during retrieval: {e}")
 
-    if "last_response" in st.session_state:
-        resp    = st.session_state.last_response
-        elapsed = st.session_state.get("last_elapsed", 0)
-
-        st.markdown(f"**Answer** *(responded in {elapsed:.2f}s)*")
+    if "last_answer" in st.session_state:
+        st.markdown(f"**Answer** *(responded in {st.session_state.last_elapsed:.2f}s)*")
         st.markdown(
-            f'<div class="answer-box">{resp["answer"]}</div>',
+            f'<div class="answer-box">{st.session_state.last_answer}</div>',
             unsafe_allow_html=True,
         )
 
         with st.expander("📚 Source Chunks Used"):
-            for i, doc in enumerate(resp.get("context", []), 1):
+            for i, doc in enumerate(st.session_state.last_docs, 1):
                 src = doc.metadata.get("source", "Unknown")
                 pg  = doc.metadata.get("page", "?")
                 st.markdown(f"**Chunk {i}** — `{os.path.basename(src)}` · page {pg}")
