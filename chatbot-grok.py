@@ -3,12 +3,13 @@ import os
 import time
 from langchain_groq import ChatGroq
 from langchain_openai import OpenAIEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter           # ✅ fixed
-from langchain.chains.combine_documents import create_stuff_documents_chain   # ✅ fixed
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.prompts import ChatPromptTemplate
-from langchain.chains import create_retrieval_chain
+from langchain_core.runnables import RunnablePassthrough
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import PyPDFDirectoryLoader
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain.chains import create_retrieval_chain
 from dotenv import load_dotenv
 
 # ── Environment ──────────────────────────────────────────────────────────────
@@ -31,58 +32,55 @@ st.set_page_config(
 )
 
 # ── Custom CSS ────────────────────────────────────────────────────────────────
-st.markdown(
-    """
+st.markdown("""
 <style>
-        body { background-color: #c3d9cb; }
-        .stApp {
-            background-color: #c3d9cb;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
-        }
-        .main-header {
-            text-align: center;
-            font-size: 28px;
-            font-weight: bold;
-            color: #2c3e50;
-            padding: 10px;
-        }
-        .stTextInput, .stFileUploader, .stButton > button { border-radius: 8px; }
-        .stButton > button {
-            background-color: #3498db;
-            color: white;
-            font-size: 16px;
-            font-weight: bold;
-            padding: 10px 20px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        .stButton > button:hover { background-color: #a3a5cf; }
-        .answer-box {
-            background: #e8f5e9;
-            border-left: 5px solid #43a047;
-            border-radius: 10px;
-            padding: 18px 22px;
-            font-size: 1rem;
-            line-height: 1.7;
-            color: #1b5e20;
-        }
-        .badge-ready   { background:#d4edda; color:#155724; padding:6px 14px; border-radius:20px; font-size:.85rem; font-weight:600; }
-        .badge-missing { background:#fff3cd; color:#856404; padding:6px 14px; border-radius:20px; font-size:.85rem; font-weight:600; }
-        .card {
-            background: white;
-            border-radius: 14px;
-            padding: 20px 24px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.07);
-            margin-bottom: 20px;
-        }
+    body { background-color: #c3d9cb; }
+    .stApp {
+        background-color: #c3d9cb;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
+    }
+    .main-header {
+        text-align: center;
+        font-size: 28px;
+        font-weight: bold;
+        color: #2c3e50;
+        padding: 10px;
+    }
+    .stTextInput, .stFileUploader, .stButton > button { border-radius: 8px; }
+    .stButton > button {
+        background-color: #3498db;
+        color: white;
+        font-size: 16px;
+        font-weight: bold;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: 0.3s;
+    }
+    .stButton > button:hover { background-color: #a3a5cf; }
+    .answer-box {
+        background: #e8f5e9;
+        border-left: 5px solid #43a047;
+        border-radius: 10px;
+        padding: 18px 22px;
+        font-size: 1rem;
+        line-height: 1.7;
+        color: #1b5e20;
+    }
+    .badge-ready   { background:#d4edda; color:#155724; padding:6px 14px; border-radius:20px; font-size:.85rem; font-weight:600; }
+    .badge-missing { background:#fff3cd; color:#856404; padding:6px 14px; border-radius:20px; font-size:.85rem; font-weight:600; }
+    .card {
+        background: white;
+        border-radius: 14px;
+        padding: 20px 24px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.07);
+        margin-bottom: 20px;
+    }
 </style>
-    """,
-    unsafe_allow_html=True,
-)
+""", unsafe_allow_html=True)
 
 # ── Header ────────────────────────────────────────────────────────────────────
 st.markdown("<div class='main-header'>💬 Chat with Your Doctor</div>", unsafe_allow_html=True)
