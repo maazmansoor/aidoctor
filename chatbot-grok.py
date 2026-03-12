@@ -3,7 +3,7 @@ import os
 import time
 from langchain_groq import ChatGroq
 from langchain_openai import OpenAIEmbeddings
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter          # ✅ fixed
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import ChatPromptTemplate
 from langchain.chains import create_retrieval_chain
@@ -34,9 +34,7 @@ st.set_page_config(
 st.markdown(
     """
 <style>
-        body {
-            background-color: #c3d9cb;
-        }
+        body { background-color: #c3d9cb; }
         .stApp {
             background-color: #c3d9cb;
             padding: 20px;
@@ -50,13 +48,7 @@ st.markdown(
             color: #2c3e50;
             padding: 10px;
         }
-        .sidebar .sidebar-content {
-            background-color: #a3a5cf !important;
-            color: white !important;
-        }
-        .stTextInput, .stFileUploader, .stButton > button {
-            border-radius: 8px;
-        }
+        .stTextInput, .stFileUploader, .stButton > button { border-radius: 8px; }
         .stButton > button {
             background-color: #3498db;
             color: white;
@@ -68,9 +60,7 @@ st.markdown(
             cursor: pointer;
             transition: 0.3s;
         }
-        .stButton > button:hover {
-            background-color: #a3a5cf;
-        }
+        .stButton > button:hover { background-color: #a3a5cf; }
         .answer-box {
             background: #e8f5e9;
             border-left: 5px solid #43a047;
@@ -102,7 +92,7 @@ st.markdown("<div class='main-header'>💬 Chat with Your Doctor</div>", unsafe_
 def get_llm():
     return ChatGroq(
         groq_api_key=GROQ_API_KEY,
-        model_name="llama-3.3-70b-versatile",  # ✅ updated from deprecated llama-3.1-70b-versatile
+        model_name="llama-3.3-70b-versatile",
     )
 
 llm = get_llm()
@@ -164,8 +154,7 @@ def build_vector_store(uploaded_files, chunk_size: int, chunk_overlap: int, max_
             pass
 
     for up in uploaded_files:
-        file_path = os.path.join(tmp_dir, up.name)
-        with open(file_path, "wb") as out_f:
+        with open(os.path.join(tmp_dir, up.name), "wb") as out_f:
             out_f.write(up.read())
 
     with st.spinner("📄 Loading PDF documents…"):
@@ -183,10 +172,9 @@ def build_vector_store(uploaded_files, chunk_size: int, chunk_overlap: int, max_
         embeddings = OpenAIEmbeddings()
         vectors    = FAISS.from_documents(chunks, embeddings)
 
-    st.session_state.embeddings       = embeddings
-    st.session_state.vectors          = vectors
-    st.session_state.final_documents  = chunks
-
+    st.session_state.embeddings      = embeddings
+    st.session_state.vectors         = vectors
+    st.session_state.final_documents = chunks
     return True
 
 # ── Main layout ───────────────────────────────────────────────────────────────
